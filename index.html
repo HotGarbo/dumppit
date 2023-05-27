@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+
+<head>
+  <title>dumppit</title>
+  <meta charset="utf8">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A reddit firehose">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="/terlet.png">
+  <meta property="og:url" content="https://dumppit.hotgarba.ge">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#000000">
+  <link rel="icon" href="/terlet.png">
+  <link rel="apple-touch-icon" href="/terlet.png">
+  <link rel="manifest" href="/manifest.json">
+  <style>
+    html {
+      scroll-snap-type: y mandatory;
+      color: white;
+      background: black;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      scroll-snap-type: y mandatory;
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+      line-height: 1.2;
+    }
+
+    body>header {
+      display: flex;
+      flex-flow: row wrap;
+      align-items: baseline;
+      padding: 0 .5rem;
+      scroll-snap-align: start;
+    }
+
+    body>footer {
+      position: fixed;
+      bottom: 0;
+      right: 0;
+      padding: .5rem;
+    }
+
+    h1,
+    h2 {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+    }
+
+    h2 {
+      font-size: 1.2rem;
+    }
+
+    a {
+      color: lightblue;
+    }
+
+    main {
+      display: flex;
+      flex-wrap: wrap;
+      flex: 1 0 auto;
+    }
+
+    article {
+      width: 100vmin;
+      max-height: 100vh;
+      flex: 1 0 auto;
+      padding: .5rem;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      scroll-snap-align: start;
+    }
+
+    article>.content {
+      flex: 1 1 content;
+      display: flex;
+      overflow: hidden;
+    }
+
+    article>.content>a {
+      display: contents;
+    }
+
+    article header,
+    article footer {
+      word-wrap: break-word;
+      margin-bottom: .25rem;
+    }
+
+    img,
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .gallery {
+      display: flex;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      overflow-x: auto;
+    }
+
+    .gallery>a {
+      display: contents;
+    }
+
+    .gallery>a>img {
+      width: auto;
+      max-width: 100%;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>dumppit</h2>
+      <div style='margin-left: auto'>
+        <label>Text Posts: <input type='checkbox' id='selfPosts' checked></label>
+        <label>Show NSFW:
+          <select id="nsfw">
+            <option>No</option>
+            <option>Yes</option>
+            <option>Only</option>
+          </select>
+        </label>
+      </div>
+  </header>
+  <main>
+    <div style="width: 100%; font-size: 75vmin; text-align: center; align-self: end">🚽</div>
+  </main>
+  <footer>
+    <a target="_blank" href="https://github.com/hotgarbo/dumppit">GitHub</a>
+  </footer>
+  <script type="text/javascript">
+    const domain = "https://old.reddit.com";
+    let urls = {};
+    let lastId = 0;
+    let isLoading = false;
+
+    window.onload = () => {
+      document.getElementById("nsfw").value = window.localStorage.getItem("nsfw") || "No";
+      document.getElementById("selfPosts").checked = window.localStorage.getItem("selfPosts") == "false" ? false : true;
+      let hash = window.location.hash.replace("#", "");
+      if (!hash) {
+        // Find latest post ID
+        fetchUrl(`${domain}/new.json?limit=2&jsonp=latest&ts=${Date.now()}`);
+      } else {
+        if (parseInt(hash)) {
+          // Load posts from provided ID
+          document.querySelector('main').innerHTML = '';
+          fetchPosts(hash);
+        } else {
+          // Load user/subreddit URL
+          fetchSubreddit(hash);
+        }
+      }
+    }
+
+    document.getElementById('selfPosts').onchange = (evt) => {
+      window.localStorage.setItem("selfPosts", evt.target.checked);
+      location.reload();
+    }
+
+    document.getElementById('nsfw').onchange = (evt) => {
+      if (evt.target.value != "No") {
+        if (!window.confirm("If you are under the age of 18 or find this content offensive, please don't look at it. Thank you!")) {
+          evt.target.value = "No";
+          window.localStorage.setItem("nsfw", evt.target.value);
+          return;
+        }
+      }
+      window.localStorage.setItem("nsfw", evt.target.value);
+      location.reload();
+    }
+
+    window.onhashchange = (evt) => {
+      console.debug(evt);
+      let hash = window.location.hash.replace("#", "");
+      document.querySelector('main').innerHTML = '';
+      urls = {};
+      if (parseInt(hash)) {
+        fetchPosts(hash);
+      } else {
+        fetchSubreddit(hash);
+      }
+    }
+
+    function latest(json) {
+      if (!json || !json.data || !json.data.after) {
+        alert("Failed to load latest post ID");
+        location.reload();
+      }
+      let id = base36ToInt(json.data.after);
+      console.debug(id);
+      document.querySelector('main').innerHTML = '';
+      fetchPosts(id);
+    }
+
+    function base36ToInt(b36) {
+      return parseInt(b36.replace("t3_", ""), 36);
+    }
+
+    function generateNextPosts(id) {
+      let next_ids = [];
+      for (let i = 0; i < 100; i++) {
+        id++;
+        next_ids.push("t3_" + id.toString(36));
+      }
+      return next_ids.join(',');
+    }
+
+    function fetchPosts(id) {
+      if (isLoading) return;
+      isLoading = true;
+      let next_ids = generateNextPosts(id);
+      let now = Date.now();
+      const url = `${domain}/api/info.json?id=${next_ids}&jsonp=processPosts&ts=${Math.round(now / 1000) * 1000}`;
+      fetchUrl(url);
+    }
+
+    function fetchSubreddit(url, after) {
+      if (isLoading) return;
+      isLoading = true;
+      if (!after) {
+        document.querySelector("main").innerHTML = "";
+        after = "";
+      }
+      let now = Date.now();
+      fetchUrl(`${domain}${url}.json?limit=100&after=${after}&jsonp=processSubreddit&ts=${Math.round(now / 1000) * 1000}`)
+    }
+
+    function fetchUrl(url) {
+      let jsonp = document.createElement("script");
+      jsonp.src = url;
+      jsonp.onerror = () => {
+        alert("Failed to load posts\n¯\\_(ツ)_/¯");
+      };
+      document.body.appendChild(jsonp);
+    }
+
+    function processSubreddit(results) {
+      isLoading = false;
+      if (!results || !results.data.children.length) {
+        return
+      }
+      const posts = results.data.children;
+      for (let i = 0; i < posts.length; i++) {
+        addPost(posts[i]);
+      }
+      let scrollEndObserver = new IntersectionObserver(
+        (entries, observer) => {
+          entries.forEach(e => {
+            if (e.isIntersecting) {
+              observer.disconnect();
+              e.target.remove();
+              if (results.data.after) {
+                fetchSubreddit(window.location.hash.replace("#", ""), results.data.after);
+              }
+            }
+          })
+        },
+        { threshold: 1.0 }
+      );
+      let scrollEndDiv = document.createElement('div');
+      scrollEndDiv.className = 'scrollEnd';
+      document.querySelector('main').appendChild(scrollEndDiv);
+      scrollEndObserver.observe(scrollEndDiv);
+    }
+
+    function processPosts(results) {
+      isLoading = false;
+      if (!results || !results.data.children.length) {
+        setTimeout(fetchPosts, 1000, lastId);
+        return
+      }
+      const posts = results.data.children;
+      for (let i = 0; i < posts.length; i++) {
+        lastId = base36ToInt(posts[i].data.id);
+        addPost(posts[i]);
+      }
+      let scrollEndObserver = new IntersectionObserver(
+        (entries, observer) => {
+          entries.forEach(e => {
+            if (e.isIntersecting) {
+              observer.disconnect();
+              e.target.remove();
+              if (lastId) {
+                fetchPosts(lastId);
+              }
+            }
+          })
+        },
+        { threshold: 1.0 }
+      );
+      let scrollEndDiv = document.createElement('div');
+      scrollEndDiv.className = 'scrollEnd';
+      document.querySelector('main').appendChild(scrollEndDiv);
+      scrollEndObserver.observe(scrollEndDiv);
+    }
+
+    function addPost(post) {
+      try {
+        let data = post.data;
+        let nsfw = document.getElementById('nsfw').value;
+        switch (nsfw) {
+          case "No":
+            if (data.over_18) return;
+            break;
+          case "Only":
+            if (!data.over_18) return;
+            break;
+        }
+        let url = htmlDecodeString(data.url);
+        if (urls[url]) return;
+        urls[url] = true;
+        console.debug(post);
+        let article = document.createElement('article');
+        article.id = data.id;
+        article.className = data.over_18 ? 'nsfw' : 'sfw';
+        if (data.is_self) article.className += ' self';
+        article.innerHTML += `
+					<header>
+						<h2>${data.over_18 ? '[NSFW] ' : ''}<a target='_blank' href='${!data.is_self && data.domain.startsWith('self.') ? domain : ''}${url}'>${data.title}</a></h2> (${data.domain})
+					</header>
+				`;
+        article.innerHTML += `
+					<footer>
+						<a href='#/user/${data.author}/submitted/' target='_blank'>${data.author}</a> -- <a href='#/${data.subreddit_name_prefixed}/new/' target='_blank'>${data.subreddit_name_prefixed}</a> ${(new Date(data.created_utc * 1000)).toLocaleString()}
+					</footer>
+				`;
+        let content = document.createElement('div');
+        content.className = 'content';
+        if ((data.preview && data.preview.reddit_video_preview) || (data.media && data.media.reddit_video)) {
+          let vid_url;
+          if (data.preview.reddit_video_preview) {
+            vid_url = htmlDecodeString(data.preview.reddit_video_preview.fallback_url);
+          } else if (data.media.reddit_video) {
+            vid_url = htmlDecodeString(data.media.reddit_video.fallback_url);
+          }
+          let vid = document.createElement('video');
+          vid.preload = 'none';
+          vid.src = vid_url;
+          vid.title = `${data.title} - ${data.subreddit_name_prefixed}`
+          vid.controls = true;
+          vid.muted = true;
+          vid.loop = true;
+          vid.autoplay = false;
+          vid.playsInline = true;
+          vid.poster = data.thumbnail
+          if (data.preview.images[0]) {
+            if (data.preview.images[0].resolutions) {
+              let resolutions = data.preview.images[0].resolutions;
+              let idx = resolutions.length - 1;
+              vid.poster = htmlDecodeString(resolutions[idx].url);
+              vid.width = resolutions[idx].width
+              vid.height = resolutions[idx].height
+            }
+          }
+          content.appendChild(vid);
+        } else if (data.preview) {
+          for (let img of data.preview.images) {
+            let img_url = htmlDecodeString(img.source.url);
+            let a = document.createElement('a');
+            a.href = img_url;
+            a.target = '_blank';
+            let width = img.source.width;
+            let height = img.source.height;
+            let resolutions = img.resolutions;
+            if (img.variants && img.variants.gif) {
+              resolutions = img.variants.gif.resolutions;
+            }
+            if (resolutions) {
+              let idx = resolutions.length - 1;
+              img_url = htmlDecodeString(resolutions[idx].url);
+              width = resolutions[idx].width;
+              height = resolutions[idx].height;
+            }
+            let imgEl = document.createElement('img');
+            imgEl.loading = 'lazy';
+            imgEl.src = img_url;
+            imgEl.title = `${data.title} - ${data.subreddit_name_prefixed}`;
+            imgEl.width = width;
+            imgEl.height = height;
+            a.appendChild(imgEl);
+            content.appendChild(a);
+          }
+        } else if (data.is_gallery && data.media_metadata) {
+          let container = document.createElement('div');
+          container.className = 'gallery';
+          for (let id of Object.keys(data.media_metadata)) {
+            let img = data.media_metadata[id];
+            let img_url = htmlDecodeString(img.s.u);
+            let a = document.createElement('a');
+            a.href = img_url;
+            a.target = '_blank';
+            let width = img.s.x;
+            let height = img.s.y;
+            let resolutions = img.p;
+            if (resolutions) {
+              let idx = resolutions.length - 1;
+              img_url = htmlDecodeString(resolutions[idx].u);
+              width = resolutions[idx].x;
+              height = resolutions[idx].y;
+            }
+            let imgEl = document.createElement('img');
+            imgEl.loading = 'lazy';
+            imgEl.src = img_url;
+            imgEl.title = `${data.title} - ${data.subreddit_name_prefixed}`;
+            imgEl.width = width;
+            imgEl.height = height;
+            a.appendChild(imgEl);
+            container.appendChild(a);
+          }
+          content.appendChild(container);
+        } else if (data.media_embed && data.media_embed.content) {
+          let embed = htmlDecodeElement(data.media_embed.content);
+          embed.innerHTML = embed.innerText.replace("iframe src", "iframe loading='lazy' src");
+          embed.firstChild.style.position = 'relative';
+          embed.firstChild.style.height = '100vmin';
+          embed.firstChild.style.maxHeight = '100%';
+          embed.firstChild.loading = 'lazy';
+          content.appendChild(embed.firstChild);
+        } else if (data.is_reddit_media_domain || data.url.toLowerCase().endsWith('.jpg') || data.url.toLowerCase().endsWith('.jpeg') || data.url.toLowerCase().endsWith('.gif') || data.url.toLowerCase().endsWith('.gifv') || data.url.toLowerCase().endsWith('.png')) {
+          let imgEl = document.createElement('img');
+          imgEl.loading = 'lazy';
+          imgEl.src = data.url;
+          imgEl.title = `${data.title} - ${data.subreddit_name_prefixed}`;
+          let a = document.createElement('a');
+          a.href = data.url;
+          a.target = '_blank';
+          a.appendChild(imgEl);
+          content.appendChild(a);
+        } else {
+          if (!document.getElementById('selfPosts').checked) return;
+          content.innerHTML += `<div style='overflow: scroll; white-space: pre-wrap'>${htmlDecodeString(data.selftext)}</div>`;
+        }
+        article.appendChild(content);
+        document.querySelector('main').appendChild(article);
+      } catch (err) {
+        console.error("Error adding post", err, post);
+      }
+    }
+
+    function htmlDecodeElement(str) {
+      let div = document.createElement('div');
+      div.innerHTML = str;
+      return div;
+    }
+
+    function htmlDecodeString(str) {
+      return htmlDecodeElement(str).innerText;
+    }
+  </script>
+</body>

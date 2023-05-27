@@ -1,0 +1,12 @@
+{
+    "name": "dumppit",
+    "short_name": "dumppit",
+    "theme_color": "#000000",
+    "background_color": "#000000",
+    "display": "fullscreen",
+    "scope": "/",
+    "start_url": "/",
+    "icons": [
+      { "src": "/terlet.png", "type": "image/png", "sizes": "618x618", "purpose": "any maskable" }
+    ]
+}
