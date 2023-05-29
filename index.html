@@ -244,7 +244,7 @@
       let jsonp = document.createElement("script");
       jsonp.src = url;
       jsonp.onerror = () => {
-        alert("Failed to load posts\n¯\\_(ツ)_/¯");
+        alert("Failed to load posts\nIf using Firefox, disable Enhanced Tracking Protection to allow loading external content from reddit");
       };
       document.body.appendChild(jsonp);
     }
