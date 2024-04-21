@@ -372,7 +372,11 @@
             let width = img.source.width;
             let height = img.source.height;
             let resolutions = img.resolutions;
-            if (img.variants && img.variants.gif) {
+            let isMp4 = false;
+            if (img.variants && img.variants.mp4) {
+              isMp4 = true;
+              resolutions = img.variants.mp4.resolutions;
+            } else if (img.variants && img.variants.gif) {
               resolutions = img.variants.gif.resolutions;
             }
             if (resolutions) {
@@ -381,14 +385,27 @@
               width = resolutions[idx].width;
               height = resolutions[idx].height;
             }
-            let imgEl = document.createElement('img');
-            imgEl.loading = 'lazy';
-            imgEl.src = img_url;
-            imgEl.title = `${data.title} - ${data.subreddit_name_prefixed}`;
-            imgEl.width = width;
-            imgEl.height = height;
-            a.appendChild(imgEl);
-            content.appendChild(imgEl);
+            let el;
+            if (isMp4) {
+              el = document.createElement('video');
+              el.preload = 'none';
+              el.src = img_url;
+              el.controls = true;
+              el.muted = true;
+              el.loop = true;
+              el.autoplay = false;
+              el.playsInline = true;
+              el.poster = htmlDecodeString(img.resolutions[img.resolutions.length - 1].url);
+              el.loop = true;
+            } else {
+              el = document.createElement('img');
+              el.loading = 'lazy';
+              el.src = img_url;
+            }
+            el.title = `${data.title} - ${data.subreddit_name_prefixed}`;
+            el.width = width;
+            el.height = height;
+            content.appendChild(el);
           }
         } else if (data.is_gallery && data.media_metadata) {
           let container = document.createElement('div');
