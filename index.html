@@ -113,11 +113,7 @@
       overflow-x: auto;
     }
 
-    .gallery>a {
-      display: contents;
-    }
-
-    .gallery>a>img {
+    .gallery>img {
       width: auto;
       max-width: 100%;
     }
@@ -373,9 +369,6 @@
         } else if (data.preview) {
           for (let img of data.preview.images) {
             let img_url = htmlDecodeString(img.source.url);
-            let a = document.createElement('a');
-            a.href = img_url;
-            a.target = '_blank';
             let width = img.source.width;
             let height = img.source.height;
             let resolutions = img.resolutions;
@@ -395,7 +388,7 @@
             imgEl.width = width;
             imgEl.height = height;
             a.appendChild(imgEl);
-            content.appendChild(a);
+            content.appendChild(imgEl);
           }
         } else if (data.is_gallery && data.media_metadata) {
           let container = document.createElement('div');
@@ -403,9 +396,6 @@
           for (let id of Object.keys(data.media_metadata)) {
             let img = data.media_metadata[id];
             let img_url = htmlDecodeString(img.s.u);
-            let a = document.createElement('a');
-            a.href = img_url;
-            a.target = '_blank';
             let width = img.s.x;
             let height = img.s.y;
             let resolutions = img.p;
@@ -421,8 +411,7 @@
             imgEl.title = `${data.title} - ${data.subreddit_name_prefixed}`;
             imgEl.width = width;
             imgEl.height = height;
-            a.appendChild(imgEl);
-            container.appendChild(a);
+            container.appendChild(imgEl);
           }
           content.appendChild(container);
         } else if (data.media_embed && data.media_embed.content) {
@@ -438,11 +427,7 @@
           imgEl.loading = 'lazy';
           imgEl.src = data.url;
           imgEl.title = `${data.title} - ${data.subreddit_name_prefixed}`;
-          let a = document.createElement('a');
-          a.href = data.url;
-          a.target = '_blank';
-          a.appendChild(imgEl);
-          content.appendChild(a);
+          content.appendChild(imgEl);
         } else {
           if (!document.getElementById('selfPosts').checked) return;
           content.innerHTML += `<div style='overflow: scroll; white-space: pre-wrap'>${htmlDecodeString(data.selftext)}</div>`;
